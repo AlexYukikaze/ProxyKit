@@ -66,5 +66,5 @@ namespace ProjectProxy
 
 The code is available at github [project][home] under **MIT licence**
 
- [home]: https://github.com/AlexYukikaze/ProxiKit
- [issue]: https://github.com/AlexYukikaze/ProxiKit/issues
+ [home]: https://github.com/AlexYukikaze/ProxyKit
+ [issue]: https://github.com/AlexYukikaze/ProxyKit/issues
