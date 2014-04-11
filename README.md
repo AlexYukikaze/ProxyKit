@@ -7,16 +7,13 @@ Proxy server framework
 
 - Core functional
 - Socks4 proxy
-
-## Planned :
-
-- Socks5
-    - Login/Password auth
-- HTTP/HTTPS
+- ~~Socks5~~ Not yet
+    - ~~Login/Password auth~~ Not yet
+- ~~HTTP/HTTPS~~ Not yet
 
 ## Usage :
 
-### Socks4 :
+### Socks :
 
 ```csharp
 using System;
