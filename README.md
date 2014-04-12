@@ -63,7 +63,8 @@ namespace ProjectProxy
 
 ## License :
 
-The code is available at github [project][home] under **MIT licence**
+The code is available at github [project][home] under [MIT licence][license]
 
  [home]: https://github.com/AlexYukikaze/ProxyKit
  [issue]: https://github.com/AlexYukikaze/ProxyKit/issues
+ [license]: https://github.com/AlexYukikaze/ProxyKit/blob/master/LICENSE.md
