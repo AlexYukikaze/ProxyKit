@@ -1,15 +1,17 @@
-ProxyKit
-=================================
+#ProxyKit
+
 
 Proxy server framework
 
 ## Features :
 
-- Core functional
-- Socks4 proxy
-- ~~Socks5~~ Not yet
-    - ~~Login/Password auth~~ Not yet
-- ~~HTTP/HTTPS~~ Not yet
+- **Core functional**
+- **Socks4 proxy**
+- **Socks5**
+    - **Login/Password auth**
+    - **~~Port binding~~** not yet
+    - **~~UDP~~** not yet
+- **~~HTTP/HTTPS~~** not yet
 
 ## Usage :
 

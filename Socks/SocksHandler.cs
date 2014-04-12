@@ -11,7 +11,7 @@ namespace ProxyKit.Socks
         protected Socket _localSocket, _remoteSocket, _acceptSocket;
         protected byte[] _buffer;
         protected string _username;
-        protected IPEndPoint _bindEndPoint;
+        protected IPEndPoint _bindEndPoint, _endPoint;
         private readonly HandshakeCallback _handshakeCallback;
 
         protected SocksHandler(Socket localSocket,
@@ -27,9 +27,9 @@ namespace ProxyKit.Socks
 
         protected abstract void OnAccept(IAsyncResult ar);
         protected abstract void ProcessRequest(NetworkStream stream);
-        protected abstract void Complete(byte value);
+        protected abstract void SendRespoce(byte value);
 
-        protected void Complete(bool success)
+        protected void Dispoce(bool success)
         {
             if(_acceptSocket != null)
                 _acceptSocket.Close();
@@ -50,7 +50,7 @@ namespace ProxyKit.Socks
             }
             catch (Exception)
             {
-                Complete(false);
+                Dispoce(false);
             }
         }
     }

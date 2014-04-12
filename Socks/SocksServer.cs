@@ -19,6 +19,11 @@ namespace ProxyKit.Socks
         {
         }
 
+        public SocksServer(int port, AuthCallbackHandler callback) :
+            this(IPAddress.Any, port, callback)
+        {
+        }
+
         protected override void AcceptCallback(IAsyncResult ar)
         {
             try

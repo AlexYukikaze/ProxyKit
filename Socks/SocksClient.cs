@@ -51,8 +51,9 @@ namespace ProxyKit.Socks
                         break;
 
                     case 5: //SOCKS 5
-
-                        //break;
+                        _socksHandler = new Socks5Handler(_localSocket, handshakeEnd,
+                            _authCallback);
+                        break;
 
                     default:
                         Dispose();

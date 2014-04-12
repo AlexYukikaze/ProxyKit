@@ -8,10 +8,6 @@ namespace ProxyKit.Socks
 {
     internal sealed class Socks4Handler : SocksHandler
     {
-        private IPEndPoint _endPoint;
-
-        public IPEndPoint EndPoint { get { return _endPoint; } }
-        
         public Socks4Handler(Socket localSocket, HandshakeCallback callback) : base(localSocket, callback)
         {
         }
@@ -24,7 +20,7 @@ namespace ProxyKit.Socks
                 CommandType type = (CommandType)reader.ReadByte();
                 if (type != CommandType.CONNECT && type != CommandType.BIND)
                 {
-                    Complete(false);
+                    Dispoce(false);
                     return;
                 }
 
@@ -41,10 +37,10 @@ namespace ProxyKit.Socks
                         _remoteSocket.Connect(_endPoint);
                         if (_remoteSocket.Connected)
                         {
-                            Complete(0x5a);
+                            SendRespoce(0x5a);
                             return;
                         }
-                        Complete(0x5b);
+                        SendRespoce(0x5b);
                         break;
                     }
                     case CommandType.BIND: //BUG: Potential bug
@@ -58,7 +54,7 @@ namespace ProxyKit.Socks
                         _acceptSocket.Bind(new IPEndPoint(0, 0));
                         _acceptSocket.Listen(10);
                         
-                        Complete(0x5a);
+                        SendRespoce(0x5a);
                         _acceptSocket.BeginAccept(OnAccept, null);
                         break;
                     }
@@ -66,7 +62,7 @@ namespace ProxyKit.Socks
             }
             catch
             {
-                Complete(0x5b);
+                SendRespoce(0x5b);
             }
         }
 
@@ -78,14 +74,14 @@ namespace ProxyKit.Socks
                 var remoteAddress = ((IPEndPoint)_remoteSocket.RemoteEndPoint).Address;
                 if (remoteAddress.Equals(_bindEndPoint.Address))
                 {
-                    Complete(0x5a);
+                    SendRespoce(0x5a);
                     return;
                 }
-                Complete(0x5b);
+                SendRespoce(0x5b);
             }
             catch
             {
-                Complete(0x5b);
+                SendRespoce(0x5b);
             }
             finally
             {
@@ -95,7 +91,7 @@ namespace ProxyKit.Socks
             }
         }
 
-        protected override void Complete(byte value)
+        protected override void SendRespoce(byte value)
         {
             try
             {
@@ -103,14 +99,14 @@ namespace ProxyKit.Socks
                 int sent = _localSocket.Send(result);
                 if (value == 0x5a && sent > 0)
                 {
-                    Complete(true);
+                    Dispoce(true);
                     return;
                 }
-                Complete(false);
+                Dispoce(false);
             }
             catch
             {
-                Complete(false);
+                Dispoce(false);
             }
         }
 
