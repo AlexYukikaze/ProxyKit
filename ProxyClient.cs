@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Net.Sockets;
 
 namespace ProxyKit
@@ -14,8 +15,18 @@ namespace ProxyKit
         private readonly SelfDestructHandler _selfDestruct;
         private readonly SubscribeHandler _subscribe;
 
-        public event EventHandler<ClientReceiveEventArgs> ReceiveClient;
-        public event EventHandler<ClientReceiveEventArgs> ReceiveServer;
+        public event EventHandler<ClientReceiveEventArgs> ReceiveFromServer;
+        public event EventHandler<ClientReceiveEventArgs> ReceiveFromClient;
+
+        public IPEndPoint ClientEndPoint
+        {
+            get { return (IPEndPoint)_localSocket.RemoteEndPoint; }
+        }
+
+        public IPEndPoint RemoteEndPoint
+        {
+            get { return (IPEndPoint)_remoteSocket.RemoteEndPoint; }
+        }
 
         protected ProxyClient(Socket localSocket, 
             SubscribeHandler subscribe, 
@@ -36,10 +47,10 @@ namespace ProxyKit
             try
             {
                 _localSocket.BeginReceive(_localBuffer, 0,
-                _localBuffer.Length,
-                SocketFlags.None,
-                localReceiveCallback,
-                null);
+                    _localBuffer.Length,
+                    SocketFlags.None,
+                    localReceiveCallback,
+                    null);
 
                 _remoteSocket.BeginReceive(_remoteBuffer, 0,
                     _remoteBuffer.Length,
@@ -53,6 +64,48 @@ namespace ProxyKit
             }
         }
 
+        #region Send data
+        public void SendToServer(byte[] data, int offset, int count)
+        {
+            if (data == null)
+                throw new ArgumentNullException("data");
+            if (offset > data.Length)
+                throw new ArgumentException("Offset can't be greater than total length");
+            if (count > data.Length)
+                throw new ArgumentException("Count can't be greater than buffer length");
+            if (offset + count > data.Length)
+                throw new ArgumentException("Offset + count can't be greater than total length");
+
+            _remoteSocket.BeginSend(data, offset, count, SocketFlags.None,
+                    remoteSendCallback, _remoteSocket);
+        }
+
+        public void SendToServer(byte[] data)
+        {
+            SendToServer(data, 0, data.Length);
+        }
+
+        public void SendToClient(byte[] data, int offset, int count)
+        {
+            if (data == null)
+                throw new ArgumentNullException("data");
+            if (offset > data.Length)
+                throw new ArgumentException("Offset can't be greater than total length");
+            if (count > data.Length)
+                throw new ArgumentException("Count can't be greater than buffer length");
+            if (offset + count > data.Length)
+                throw new ArgumentException("Offset + count can't be greater than total length");
+
+            _localSocket.BeginSend(data, offset, count, SocketFlags.None,
+                    localSendCallback, _localSocket);
+        }
+
+        public void SendToClient(byte[] data)
+        {
+            SendToClient(data, 0, data.Length);
+        }
+        #endregion
+
         #region Socket callbacks
         protected void localReceiveCallback(IAsyncResult ar)
         {
@@ -65,10 +118,21 @@ namespace ProxyKit
                     return;
                 }
 
-                //TODO: add event invocator
+                var args = new ClientReceiveEventArgs(_localBuffer, received);
+                OnFromClient(args);
 
-                _remoteSocket.BeginSend(_localBuffer, 0,
-                    _localBuffer.Length,
+                if (args.Cancel)
+                {
+                    _localSocket.BeginReceive(_localBuffer, 0,
+                        _localBuffer.Length,
+                        SocketFlags.None,
+                        localReceiveCallback,
+                        null);
+                    return;
+                }
+
+                _remoteSocket.BeginSend(args.Data, 0,
+                    args.Count,
                     SocketFlags.None,
                     remoteSendCallback,
                     null);
@@ -109,7 +173,18 @@ namespace ProxyKit
                     return;
                 }
 
-                //TODO: add event invocator
+                var args = new ClientReceiveEventArgs(_remoteBuffer, received);
+                OnFromClient(args);
+
+                if (args.Cancel)
+                {
+                    _remoteSocket.BeginReceive(_remoteBuffer, 0,
+                        _remoteBuffer.Length,
+                        SocketFlags.None,
+                        remoteReceiveCallback,
+                        null);
+                    return;
+                }
 
                 _localSocket.BeginSend(_remoteBuffer, 0,
                     _remoteBuffer.Length,
@@ -174,15 +249,15 @@ namespace ProxyKit
             if (handler != null) handler(this);
         }
 
-        protected virtual void OnReceiveClient(ClientReceiveEventArgs e)
+        protected virtual void OnFromServer(ClientReceiveEventArgs e)
         {
-            EventHandler<ClientReceiveEventArgs> handler = ReceiveClient;
+            EventHandler<ClientReceiveEventArgs> handler = ReceiveFromServer;
             if (handler != null) handler(this, e);
         }
 
-        protected virtual void OnReceiveServer(ClientReceiveEventArgs e)
+        protected virtual void OnFromClient(ClientReceiveEventArgs e)
         {
-            EventHandler<ClientReceiveEventArgs> handler = ReceiveServer;
+            EventHandler<ClientReceiveEventArgs> handler = ReceiveFromClient;
             if (handler != null) handler(this, e);
         }
     }
