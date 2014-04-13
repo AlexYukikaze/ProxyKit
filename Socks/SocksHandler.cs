@@ -6,23 +6,27 @@ using System.Threading;
 namespace ProxyKit.Socks
 {
     internal delegate void HandshakeCallback(bool success, Socket remote);
+
     internal abstract class SocksHandler
     {
-        protected Socket _localSocket, _remoteSocket, _acceptSocket;
-        protected byte[] _buffer;
-        protected string _username;
-        protected IPEndPoint _bindEndPoint, _endPoint;
         private readonly HandshakeCallback _handshakeCallback;
+        protected Socket AcceptSocket;
+        protected IPEndPoint BindEndPoint;
+        protected byte[] Buffer;
+        protected IPEndPoint EndPoint;
+        protected Socket LocalSocket;
+        protected Socket RemoteSocket;
+        protected string Username;
 
-        protected SocksHandler(Socket localSocket,
-            HandshakeCallback callback)
+        protected SocksHandler(Socket localSocket, HandshakeCallback callback)
         {
             if(callback == null)
+            {
                 throw new ArgumentNullException("callback");
-
-            _localSocket = localSocket;
+            }
+            LocalSocket = localSocket;
             _handshakeCallback = callback;
-            _buffer = new byte[0x100];
+            Buffer = new byte[0x100];
         }
 
         protected abstract void OnAccept(IAsyncResult ar);
@@ -31,24 +35,26 @@ namespace ProxyKit.Socks
 
         protected void Dispoce(bool success)
         {
-            if(_acceptSocket != null)
-                _acceptSocket.Close();
-            _handshakeCallback(success, _remoteSocket);
+            if(AcceptSocket != null)
+            {
+                AcceptSocket.Close();
+            }
+            _handshakeCallback(success, RemoteSocket);
         }
 
         public void BeginRequestData()
         {
-            new Thread(requestThread).Start();
+            new Thread(RequestThread).Start();
         }
 
-        private void requestThread()
+        private void RequestThread()
         {
             try
             {
-                NetworkStream stream = new NetworkStream(_localSocket, false);
+                var stream = new NetworkStream(LocalSocket, false);
                 ProcessRequest(stream);
             }
-            catch (Exception)
+            catch(Exception)
             {
                 Dispoce(false);
             }

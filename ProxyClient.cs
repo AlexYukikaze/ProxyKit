@@ -5,79 +5,129 @@ using System.Net.Sockets;
 namespace ProxyKit
 {
     public delegate void SelfDestructHandler(ProxyClient client);
+
     public delegate void SubscribeHandler(ProxyClient client);
-    
+
     public abstract class ProxyClient : IDisposable
     {
         private const int BUFFER_SIZE = 0x1000;
-        protected Socket _localSocket, _remoteSocket;
-        protected readonly byte[] _localBuffer, _remoteBuffer;
+
+        protected readonly byte[] LocalBuffer;
+        protected readonly byte[] RemoteBuffer;
         private readonly SelfDestructHandler _selfDestruct;
         private readonly SubscribeHandler _subscribe;
+        protected Socket LocalSocket;
+        protected Socket RemoteSocket;
 
-        public event EventHandler<ClientReceiveEventArgs> ReceiveFromServer;
+        protected ProxyClient(Socket localSocket, SubscribeHandler subscribe, SelfDestructHandler selfDestruct)
+        {
+            LocalSocket = localSocket;
+            _selfDestruct = selfDestruct;
+            _subscribe = subscribe;
+            LocalBuffer = new byte[BUFFER_SIZE];
+            RemoteBuffer = new byte[BUFFER_SIZE];
+        }
+
         public event EventHandler<ClientReceiveEventArgs> ReceiveFromClient;
+        public event EventHandler<ClientReceiveEventArgs> ReceiveFromServer;
+
+        #region Public Properties
 
         public IPEndPoint ClientEndPoint
         {
-            get { return (IPEndPoint)_localSocket.RemoteEndPoint; }
+            get
+            {
+                return (IPEndPoint)LocalSocket.RemoteEndPoint;
+            }
         }
 
         public IPEndPoint RemoteEndPoint
         {
-            get { return (IPEndPoint)_remoteSocket.RemoteEndPoint; }
+            get
+            {
+                return (IPEndPoint)RemoteSocket.RemoteEndPoint;
+            }
         }
 
-        protected ProxyClient(Socket localSocket, 
-            SubscribeHandler subscribe, 
-            SelfDestructHandler selfDestruct)
-        {
-            _localSocket  = localSocket;
-            _selfDestruct = selfDestruct;
-            _subscribe = subscribe;
+        #endregion
 
-            _localBuffer  = new byte[BUFFER_SIZE];
-            _remoteBuffer = new byte[BUFFER_SIZE];
-        }
+        #region Public Methods and Operators
 
-        public abstract void StartHandshake();
-
-        protected void BeginExchange()
+        public void Dispose()
         {
             try
             {
-                _localSocket.BeginReceive(_localBuffer, 0,
-                    _localBuffer.Length,
-                    SocketFlags.None,
-                    localReceiveCallback,
-                    null);
-
-                _remoteSocket.BeginReceive(_remoteBuffer, 0,
-                    _remoteBuffer.Length,
-                    SocketFlags.None,
-                    remoteReceiveCallback,
-                    null);
+                LocalSocket.Shutdown(SocketShutdown.Both);
             }
             catch
+            {}
+            try
             {
-                Dispose();
+                RemoteSocket.Shutdown(SocketShutdown.Both);
+            }
+            catch
+            {}
+            if(LocalSocket != null)
+            {
+                LocalSocket.Close();
+            }
+            if(RemoteSocket != null)
+            {
+                RemoteSocket.Close();
+            }
+            LocalSocket = null;
+            RemoteSocket = null;
+            if(_selfDestruct != null)
+            {
+                _selfDestruct(this);
             }
         }
 
-        #region Send data
+        public void SendToClient(byte[] data, int offset, int count)
+        {
+            if(data == null)
+            {
+                throw new ArgumentNullException("data");
+            }
+            if(offset > data.Length)
+            {
+                throw new ArgumentException("Offset can't be greater than total length");
+            }
+            if(count > data.Length)
+            {
+                throw new ArgumentException("Count can't be greater than buffer length");
+            }
+            if(offset + count > data.Length)
+            {
+                throw new ArgumentException("Offset + count can't be greater than total length");
+            }
+            LocalSocket.BeginSend(data, offset, count, SocketFlags.None, LocalSendCallback, LocalSocket);
+        }
+
+        public void SendToClient(byte[] data)
+        {
+            SendToClient(data, 0, data.Length);
+        }
+
         public void SendToServer(byte[] data, int offset, int count)
         {
-            if (data == null)
+            if(data == null)
+            {
                 throw new ArgumentNullException("data");
-            if (offset > data.Length)
+            }
+            if(offset > data.Length)
+            {
                 throw new ArgumentException("Offset can't be greater than total length");
-            if (count > data.Length)
+            }
+            if(count > data.Length)
+            {
                 throw new ArgumentException("Count can't be greater than buffer length");
-            if (offset + count > data.Length)
+            }
+            if(offset + count > data.Length)
+            {
                 throw new ArgumentException("Offset + count can't be greater than total length");
-
-            _remoteSocket.BeginSend(data, offset, count, SocketFlags.None,
-                    remoteSendCallback, _remoteSocket);
+            }
+            RemoteSocket.BeginSend(data, offset, count, SocketFlags.None, RemoteSendCallback, RemoteSocket);
         }
 
         public void SendToServer(byte[] data)
@@ -85,56 +135,29 @@ namespace ProxyKit
             SendToServer(data, 0, data.Length);
         }
 
-        public void SendToClient(byte[] data, int offset, int count)
-        {
-            if (data == null)
-                throw new ArgumentNullException("data");
-            if (offset > data.Length)
-                throw new ArgumentException("Offset can't be greater than total length");
-            if (count > data.Length)
-                throw new ArgumentException("Count can't be greater than buffer length");
-            if (offset + count > data.Length)
-                throw new ArgumentException("Offset + count can't be greater than total length");
-
-            _localSocket.BeginSend(data, offset, count, SocketFlags.None,
-                    localSendCallback, _localSocket);
-        }
-
-        public void SendToClient(byte[] data)
-        {
-            SendToClient(data, 0, data.Length);
-        }
         #endregion
 
-        #region Socket callbacks
-        protected void localReceiveCallback(IAsyncResult ar)
+        #region Methods
+
+        internal abstract void StartHandshake();
+
+        protected void BeginExchange()
         {
             try
             {
-                int received = _localSocket.EndReceive(ar);
-                if (received == 0)
-                {
-                    Dispose();
-                    return;
-                }
-
-                var args = new ClientReceiveEventArgs(_localBuffer, received);
-                OnFromClient(args);
-
-                if (args.Cancel)
-                {
-                    _localSocket.BeginReceive(_localBuffer, 0,
-                        _localBuffer.Length,
-                        SocketFlags.None,
-                        localReceiveCallback,
-                        null);
-                    return;
-                }
-
-                _remoteSocket.BeginSend(args.Data, 0,
-                    args.Count,
-                    SocketFlags.None,
-                    remoteSendCallback,
+                LocalSocket.BeginReceive(
+                                         LocalBuffer, 
+                    0, 
+                    LocalBuffer.Length, 
+                    SocketFlags.None, 
+                    LocalReceiveCallback, 
+                    null);
+                RemoteSocket.BeginReceive(
+                                          RemoteBuffer, 
+                    0, 
+                    RemoteBuffer.Length, 
+                    SocketFlags.None, 
+                    RemoteReceiveCallback, 
                     null);
             }
             catch
@@ -143,54 +166,30 @@ namespace ProxyKit
             }
         }
 
-        protected void remoteSendCallback(IAsyncResult ar)
+        protected void LocalReceiveCallback(IAsyncResult ar)
         {
             try
             {
-                int sent = _remoteSocket.EndSend(ar);
-                if (sent > 0)
-                {
-                    _localSocket.BeginReceive(_localBuffer, 0,
-                        _localBuffer.Length,
-                        SocketFlags.None,
-                        localReceiveCallback,
-                        null);
-                    return;
-                }
-            }
-            catch { }
-            Dispose();
-        }
-
-        protected void remoteReceiveCallback(IAsyncResult ar)
-        {
-            try
-            {
-                int received = _remoteSocket.EndReceive(ar);
-                if (received == 0)
+                int received = LocalSocket.EndReceive(ar);
+                if(received == 0)
                 {
                     Dispose();
                     return;
                 }
-
-                var args = new ClientReceiveEventArgs(_remoteBuffer, received);
+                var args = new ClientReceiveEventArgs(LocalBuffer, received);
                 OnFromClient(args);
-
-                if (args.Cancel)
+                if(args.Cancel)
                 {
-                    _remoteSocket.BeginReceive(_remoteBuffer, 0,
-                        _remoteBuffer.Length,
-                        SocketFlags.None,
-                        remoteReceiveCallback,
+                    LocalSocket.BeginReceive(
+                                             LocalBuffer, 
+                        0, 
+                        LocalBuffer.Length, 
+                        SocketFlags.None, 
+                        LocalReceiveCallback, 
                         null);
                     return;
                 }
-
-                _localSocket.BeginSend(_remoteBuffer, 0,
-                    _remoteBuffer.Length,
-                    SocketFlags.None,
-                    localSendCallback,
-                    null);
+                RemoteSocket.BeginSend(args.Data, 0, args.Count, SocketFlags.None, RemoteSendCallback, null);
             }
             catch
             {
@@ -198,67 +197,108 @@ namespace ProxyKit
             }
         }
 
-        protected void localSendCallback(IAsyncResult ar)
+        protected void LocalSendCallback(IAsyncResult ar)
         {
             try
             {
-                int sent = _localSocket.EndSend(ar);
-                if (sent > 0)
+                int sent = LocalSocket.EndSend(ar);
+                if(sent > 0)
                 {
-                    _remoteSocket.BeginReceive(_remoteBuffer, 0,
-                        _remoteBuffer.Length,
-                        SocketFlags.None,
-                        remoteReceiveCallback,
+                    RemoteSocket.BeginReceive(
+                                              RemoteBuffer, 
+                        0, 
+                        RemoteBuffer.Length, 
+                        SocketFlags.None, 
+                        RemoteReceiveCallback, 
                         null);
                     return;
                 }
             }
-            catch { }
+            catch
+            {}
             Dispose();
-        }
-
-        #endregion
-        
-        public void Dispose()
-        {
-            try
-            {
-                _localSocket.Shutdown(SocketShutdown.Both);
-            }
-            catch{ }
-            try
-            {
-                _remoteSocket.Shutdown(SocketShutdown.Both);
-            }
-            catch { }
-
-            if (_localSocket != null)
-                _localSocket.Close();
-            if (_remoteSocket != null)
-                _remoteSocket.Close();
-
-            _localSocket = null;
-            _remoteSocket = null;
-            if (_selfDestruct != null)
-                _selfDestruct(this);
         }
 
         protected void OnConnect()
         {
-            var handler = _subscribe;
-            if (handler != null) handler(this);
-        }
-
-        protected virtual void OnFromServer(ClientReceiveEventArgs e)
-        {
-            EventHandler<ClientReceiveEventArgs> handler = ReceiveFromServer;
-            if (handler != null) handler(this, e);
+            SubscribeHandler handler = _subscribe;
+            if(handler != null)
+            {
+                handler(this);
+            }
         }
 
         protected virtual void OnFromClient(ClientReceiveEventArgs e)
         {
             EventHandler<ClientReceiveEventArgs> handler = ReceiveFromClient;
-            if (handler != null) handler(this, e);
+            if(handler != null)
+            {
+                handler(this, e);
+            }
         }
+
+        protected virtual void OnFromServer(ClientReceiveEventArgs e)
+        {
+            EventHandler<ClientReceiveEventArgs> handler = ReceiveFromServer;
+            if(handler != null)
+            {
+                handler(this, e);
+            }
+        }
+
+        protected void RemoteReceiveCallback(IAsyncResult ar)
+        {
+            try
+            {
+                int received = RemoteSocket.EndReceive(ar);
+                if(received == 0)
+                {
+                    Dispose();
+                    return;
+                }
+                var args = new ClientReceiveEventArgs(RemoteBuffer, received);
+                OnFromClient(args);
+                if(args.Cancel)
+                {
+                    RemoteSocket.BeginReceive(
+                                              RemoteBuffer, 
+                        0, 
+                        RemoteBuffer.Length, 
+                        SocketFlags.None, 
+                        RemoteReceiveCallback, 
+                        null);
+                    return;
+                }
+                LocalSocket.BeginSend(RemoteBuffer, 0, RemoteBuffer.Length, SocketFlags.None, LocalSendCallback, null);
+            }
+            catch
+            {
+                Dispose();
+            }
+        }
+
+        protected void RemoteSendCallback(IAsyncResult ar)
+        {
+            try
+            {
+                int sent = RemoteSocket.EndSend(ar);
+                if(sent > 0)
+                {
+                    LocalSocket.BeginReceive(
+                                             LocalBuffer, 
+                        0, 
+                        LocalBuffer.Length, 
+                        SocketFlags.None, 
+                        LocalReceiveCallback, 
+                        null);
+                    return;
+                }
+            }
+            catch
+            {}
+            Dispose();
+        }
+
+        #endregion
     }
 }

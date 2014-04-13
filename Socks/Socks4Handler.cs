@@ -8,34 +8,32 @@ namespace ProxyKit.Socks
 {
     internal sealed class Socks4Handler : SocksHandler
     {
-        public Socks4Handler(Socket localSocket, HandshakeCallback callback) : base(localSocket, callback)
-        {
-        }
+        public Socks4Handler(Socket localSocket, HandshakeCallback callback)
+            : base(localSocket, callback)
+        {}
 
         protected override void ProcessRequest(NetworkStream stream)
         {
             try
             {
-                BinaryReader reader = new BinaryReader(stream);
-                CommandType type = (CommandType)reader.ReadByte();
-                if (type != CommandType.CONNECT && type != CommandType.BIND)
+                var reader = new BinaryReader(stream);
+                var type = (CommandType)reader.ReadByte();
+                if(type != CommandType.Connect && type != CommandType.Bind)
                 {
                     Dispoce(false);
                     return;
                 }
-
-                switch (type)
+                switch(type)
                 {
-                    case CommandType.CONNECT:
+                    case CommandType.Connect:
                     {
                         int port = ReaderUtils.ReadInt16BE(reader);
                         byte[] host = reader.ReadBytes(4);
-                        _username = ReadString(reader);
-                        _endPoint = new IPEndPoint(new IPAddress(host), port);
-
-                        _remoteSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                        _remoteSocket.Connect(_endPoint);
-                        if (_remoteSocket.Connected)
+                        Username = ReadString(reader);
+                        EndPoint = new IPEndPoint(new IPAddress(host), port);
+                        RemoteSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        RemoteSocket.Connect(EndPoint);
+                        if(RemoteSocket.Connected)
                         {
                             SendRespoce(0x5a);
                             return;
@@ -43,19 +41,18 @@ namespace ProxyKit.Socks
                         SendRespoce(0x5b);
                         break;
                     }
-                    case CommandType.BIND: //BUG: Potential bug
+                    case CommandType.Bind:
                     {
+                        // BUG: Potential bug
                         byte[] bytes = reader.ReadBytes(6);
                         int port = bytes[1] * 256 + bytes[0];
                         string host = bytes[2] + "." + bytes[3] + "." + bytes[4] + "." + bytes[5];
-                        _bindEndPoint = new IPEndPoint(IPAddress.Parse(host), port);
-
-                        _acceptSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                        _acceptSocket.Bind(new IPEndPoint(0, 0));
-                        _acceptSocket.Listen(10);
-                        
+                        BindEndPoint = new IPEndPoint(IPAddress.Parse(host), port);
+                        AcceptSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        AcceptSocket.Bind(new IPEndPoint(0, 0));
+                        AcceptSocket.Listen(10);
                         SendRespoce(0x5a);
-                        _acceptSocket.BeginAccept(OnAccept, null);
+                        AcceptSocket.BeginAccept(OnAccept, null);
                         break;
                     }
                 }
@@ -70,9 +67,9 @@ namespace ProxyKit.Socks
         {
             try
             {
-                _remoteSocket = _acceptSocket.EndAccept(ar);
-                var remoteAddress = ((IPEndPoint)_remoteSocket.RemoteEndPoint).Address;
-                if (remoteAddress.Equals(_bindEndPoint.Address))
+                RemoteSocket = AcceptSocket.EndAccept(ar);
+                IPAddress remoteAddress = ((IPEndPoint)RemoteSocket.RemoteEndPoint).Address;
+                if(remoteAddress.Equals(BindEndPoint.Address))
                 {
                     SendRespoce(0x5a);
                     return;
@@ -85,9 +82,11 @@ namespace ProxyKit.Socks
             }
             finally
             {
-                if(_acceptSocket != null)
-                    _acceptSocket.Close();
-                _acceptSocket = null;
+                if(AcceptSocket != null)
+                {
+                    AcceptSocket.Close();
+                }
+                AcceptSocket = null;
             }
         }
 
@@ -96,8 +95,8 @@ namespace ProxyKit.Socks
             try
             {
                 var result = new byte[] { 0, value, 0, 0, 0, 0, 0, 0 };
-                int sent = _localSocket.Send(result);
-                if (value == 0x5a && sent > 0)
+                int sent = LocalSocket.Send(result);
+                if(value == 0x5a && sent > 0)
                 {
                     Dispoce(true);
                     return;
@@ -112,22 +111,27 @@ namespace ProxyKit.Socks
 
         private string ReadString(BinaryReader reader)
         {
-            byte[] stringBytes = new byte[256];
+            var stringBytes = new byte[256];
             int len = 0;
-            for (int i = 0; i < 256; i++)
+            for(int i = 0; i < 256; i++)
             {
                 len += reader.Read(stringBytes, len, 1);
                 if(stringBytes[len - 1] == 0)
+                {
                     break;
+                }
             }
-
             return Encoding.UTF8.GetString(stringBytes, 0, len - 1);
         }
 
+        #region Nested type: CommandType
+
         private enum CommandType : byte
         {
-            CONNECT = 1,
-            BIND    = 2,
+            Connect = 1, 
+            Bind = 2, 
         }
+
+        #endregion
     }
 }

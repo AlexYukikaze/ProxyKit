@@ -4,28 +4,27 @@ using System.Net.Sockets;
 namespace ProxyKit.Socks
 {
     public delegate bool AuthCallbackHandler(string login, string password);
+
     public class SocksClient : ProxyClient
     {
-        private AuthCallbackHandler _authCallback;
+        private readonly AuthCallbackHandler _authCallback;
         private SocksHandler _socksHandler;
 
-        public SocksClient(Socket localSocket, 
+        public SocksClient(
+            Socket localSocket, 
             SubscribeHandler subscribe, 
-            SelfDestructHandler selfDestruct,
-            AuthCallbackHandler authCallback) 
+            SelfDestructHandler selfDestruct, 
+            AuthCallbackHandler authCallback)
             : base(localSocket, subscribe, selfDestruct)
         {
             _authCallback = authCallback;
         }
 
-        public override void StartHandshake()
+        internal override void StartHandshake()
         {
             try
             {
-                _localSocket.BeginReceive(_localBuffer, 0, 1,
-                    SocketFlags.None, 
-                    HandshakeCallback,
-                    null);
+                LocalSocket.BeginReceive(LocalBuffer, 0, 1, SocketFlags.None, HandshakeCallback, null);
             }
             catch
             {
@@ -37,29 +36,24 @@ namespace ProxyKit.Socks
         {
             try
             {
-                int received = _localSocket.EndReceive(ar);
-                if (received == 0)
+                int received = LocalSocket.EndReceive(ar);
+                if(received == 0)
                 {
                     Dispose();
                     return;
                 }
-
-                switch (_localBuffer[0])
+                switch(LocalBuffer[0])
                 {
-                    case 4: //SOCKS 4
-                        _socksHandler = new Socks4Handler(_localSocket, handshakeEnd);
+                    case 4: // SOCKS 4
+                        _socksHandler = new Socks4Handler(LocalSocket, HandshakeEnd);
                         break;
-
-                    case 5: //SOCKS 5
-                        _socksHandler = new Socks5Handler(_localSocket, handshakeEnd,
-                            _authCallback);
+                    case 5: // SOCKS 5
+                        _socksHandler = new Socks5Handler(LocalSocket, HandshakeEnd, _authCallback);
                         break;
-
                     default:
                         Dispose();
                         return;
                 }
-
                 _socksHandler.BeginRequestData();
             }
             catch
@@ -68,10 +62,10 @@ namespace ProxyKit.Socks
             }
         }
 
-        private void handshakeEnd(bool success, Socket remote)
+        private void HandshakeEnd(bool success, Socket remote)
         {
-            _remoteSocket = remote;
-            if (success)
+            RemoteSocket = remote;
+            if(success)
             {
                 OnConnect();
                 BeginExchange();

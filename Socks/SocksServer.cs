@@ -6,43 +6,38 @@ namespace ProxyKit.Socks
 {
     public class SocksServer : ProxyServer
     {
-        public AuthCallbackHandler AuthCallback { get; set; }
-        public SocksServer(IPAddress ip, int port, 
-            AuthCallbackHandler callback) 
+        public SocksServer(IPAddress ip, int port, AuthCallbackHandler callback)
             : base(ip, port)
         {
             AuthCallback = callback;
         }
 
-        public SocksServer(int port) 
+        public SocksServer(int port)
             : this(IPAddress.Any, port, null)
-        {
-        }
+        {}
 
-        public SocksServer(int port, AuthCallbackHandler callback) :
-            this(IPAddress.Any, port, callback)
-        {
-        }
+        public SocksServer(int port, AuthCallbackHandler callback)
+            : this(IPAddress.Any, port, callback)
+        {}
+
+        public AuthCallbackHandler AuthCallback { get; set; }
 
         protected override void AcceptCallback(IAsyncResult ar)
         {
             try
             {
-                Socket localSocket = _listenerSocket.EndAccept(ar);
-                if (localSocket != null)
+                Socket localSocket = ListenerSocket.EndAccept(ar);
+                if(localSocket != null)
                 {
-                    SocksClient client = new SocksClient(localSocket, 
-                        Subscribe, 
-                        Remove,
-                        AuthCallback);
+                    var client = new SocksClient(localSocket, Subscribe, Remove, AuthCallback);
                     client.StartHandshake();
                 }
             }
-            catch{ }
-
+            catch
+            {}
             try
             {
-                _listenerSocket.BeginAccept(AcceptCallback, null);
+                ListenerSocket.BeginAccept(AcceptCallback, null);
             }
             catch
             {
@@ -52,7 +47,7 @@ namespace ProxyKit.Socks
 
         private void Subscribe(ProxyClient client)
         {
-            base.OnConnect(new ConnectEventArgs(client));
+            OnConnect(new ConnectEventArgs(client));
         }
     }
 }
